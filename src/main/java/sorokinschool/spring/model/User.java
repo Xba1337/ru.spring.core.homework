@@ -1,36 +1,54 @@
 package sorokinschool.spring.model;
 
-import java.util.ArrayList;
+import jakarta.persistence.*;
+
 import java.util.List;
 
+@Entity
+@Table(name = "users")
 public class User {
 
-    private final int id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
-    private final String login;
+    @Column(name = "login", nullable = false, unique = true)
+    private String login;
 
-    private final List<Account> accountList;
+    @OneToMany(mappedBy = "user", fetch = FetchType.EAGER)
+    private List<Account> accountList;
 
-    public User(int id, String login) {
-        this.id = id;
-        this.login = login;
-        this.accountList = new ArrayList<>();
+    public User() {
     }
 
-    public int getId() {
+    public User(Integer id, String login, List<Account> accountList) {
+        this.id = id;
+        this.login = login;
+        this.accountList = accountList;
+    }
+
+    public Integer getId() {
         return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
     }
 
     public String getLogin() {
         return login;
     }
 
+    public void setLogin(String login) {
+        this.login = login;
+    }
+
     public List<Account> getAccountList() {
         return accountList;
     }
 
-    public void addToAccountList(Account account) {
-        accountList.add(account);
+    public void setAccountList(List<Account> accountList) {
+        this.accountList = accountList;
     }
 
     @Override
