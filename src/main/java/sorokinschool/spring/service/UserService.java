@@ -1,6 +1,5 @@
 package sorokinschool.spring.service;
 
-import jakarta.transaction.Transactional;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.springframework.stereotype.Service;
@@ -23,7 +22,6 @@ public class UserService {
         this.transactionHelper = transactionHelper;
     }
 
-    @Transactional
     public User createUser(String login) {
         return transactionHelper.executeTransaction(session -> {
 

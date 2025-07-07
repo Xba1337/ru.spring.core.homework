@@ -27,10 +27,10 @@ public class TransactionHelper {
 
         try{
             session.beginTransaction();
-            R t = function.apply(session);
+            R r = function.apply(session);
             transaction.commit();
 
-           return t;
+           return r;
         } catch (Exception e) {
             transaction.rollback();
             throw e;

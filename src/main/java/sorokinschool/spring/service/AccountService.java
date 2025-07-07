@@ -1,6 +1,5 @@
 package sorokinschool.spring.service;
 
-import jakarta.transaction.Transactional;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.springframework.stereotype.Service;
@@ -32,7 +31,6 @@ public class AccountService {
         return session.find(Account.class, id);
     }
 
-    @Transactional
     public Account createAccount(User user) {
         return transactionHelper.executeTransaction(session -> {
 
@@ -52,7 +50,6 @@ public class AccountService {
                 .getSingleResult();
     }
 
-    @Transactional
     public void closeAccount(int accountId) {
         transactionHelper.executeTransaction(session -> {
 
@@ -81,7 +78,6 @@ public class AccountService {
         });
     }
 
-    @Transactional
     public void depositMoney(int accountId, int moneyAmount) {
         transactionHelper.executeTransaction(session -> {
             Account account = findAccountById(accountId);
@@ -94,7 +90,6 @@ public class AccountService {
         });
     }
 
-    @Transactional
     public void transferMoney(int senderAccountId, int recipientAccountId, int moneyAmount) {
         transactionHelper.executeTransaction(session -> {
             if (senderAccountId == recipientAccountId) {
@@ -122,7 +117,6 @@ public class AccountService {
         });
     }
 
-    @Transactional
     public void withdrawMoney(int accountId, int moneyAmount) {
         transactionHelper.executeTransaction(session -> {
             Account account = findAccountById(accountId);
