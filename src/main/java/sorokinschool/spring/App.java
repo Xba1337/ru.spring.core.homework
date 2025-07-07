@@ -1,13 +1,12 @@
 package sorokinschool.spring;
 
-/**
- * Hello world!
- *
- */
-public class App 
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+
+public class App
 {
     public static void main( String[] args )
     {
-        System.out.println( "Hello World!" );
+        AnnotationConfigApplicationContext context =
+                new AnnotationConfigApplicationContext("sorokinschool.spring");
     }
 }
