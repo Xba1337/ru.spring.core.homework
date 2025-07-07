@@ -1,107 +1,136 @@
 package sorokinschool.spring.service;
 
-import org.springframework.stereotype.Component;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.springframework.stereotype.Service;
 import sorokinschool.spring.model.Account;
 import sorokinschool.spring.model.AccountDefault;
 import sorokinschool.spring.model.User;
-import sorokinschool.spring.storage.DataBase;
+import sorokinschool.spring.util.TransactionHelper;
 
-import java.util.Iterator;
-import java.util.Optional;
+import java.util.Comparator;
+import java.util.List;
 
-@Component
+
+@Service
 public class AccountService {
 
-    private final DataBase dataBase;
-
+    private final SessionFactory sessionFactory;
     private final AccountDefault accountDefault;
+    private final TransactionHelper transactionHelper;
 
-    public AccountService(DataBase dataBase, AccountDefault accountDefault) {
-        this.dataBase = dataBase;
+    public AccountService(SessionFactory sessionFactory, AccountDefault accountDefault, TransactionHelper transactionHelper) {
+        this.sessionFactory = sessionFactory;
         this.accountDefault = accountDefault;
+        this.transactionHelper = transactionHelper;
     }
 
-    public Account createAccount(int userId) {
-        User user = dataBase.getUserById(userId).orElseThrow(
-                () -> new RuntimeException("Пользователь с ID %s не существует!".formatted(userId))
-        );
-        Account account = new Account(dataBase.generateAccountId(),
-                user.getId(),
-                accountDefault.getDefaultMoneyAmount());
+    public Account findAccountById(int id) {
+        Session session = sessionFactory.getCurrentSession();
 
-        user.addToAccountList(account);
-        dataBase.addToAccountDb(account);
+        return session.find(Account.class, id);
+    }
 
-        return account;
+    public Account createAccount(User user) {
+        return transactionHelper.executeTransaction(session -> {
+
+            Account account = new Account(user,
+                    accountDefault.getDefaultMoneyAmount());
+            session.persist(account);
+
+            return account;
+        });
+    }
+
+    public long getNumberOfAccounts(int userId) {
+        Session session = sessionFactory.openSession();
+
+        return session.createQuery("SELECT COUNT(*) FROM Account a WHERE a.user.id = :user_id", Long.class)
+                .setParameter("user_id", userId)
+                .getSingleResult();
     }
 
     public void closeAccount(int accountId) {
-        if (dataBase.getAccounts().isEmpty()) {
-            throw new IllegalArgumentException("Счёт с ID %s не существует!".formatted(accountId));
-        }
+        transactionHelper.executeTransaction(session -> {
 
-        Iterator<Account> accountList = dataBase.getAccounts().iterator();
-
-        while (accountList.hasNext()) {
-            Account accountForClosing = accountList.next();
-
-            if (accountForClosing.getId() == accountId) {
-                User user = dataBase.getUserById(accountForClosing.getUserId()).orElseThrow(
-                        () -> new IllegalArgumentException("Счёт с ID %s не существует!".formatted(accountForClosing.getId()))
-                );
-
-                if (user.getAccountList().size() == 1) {
-                    throw new IllegalArgumentException("Счёт %s не может быть удален, отсутствуют альтернативные счета для перевода средств!".formatted(accountId));
-                } else {
-                    Account firstAccount = user.getAccountList().get(0);
-                    firstAccount.setMoneyAmount(firstAccount.getMoneyAmount() + accountForClosing.getMoneyAmount());
-                    accountList.remove();
-                    user.getAccountList().remove(accountForClosing);
-                }
+            Account accountForClose = session.createQuery("SELECT a FROM Account a JOIN FETCH a.user u JOIN FETCH u.accountList WHERE a.id = :id",
+                            Account.class)
+                    .setParameter("id", accountId)
+                    .uniqueResult();
+            if (accountForClose == null) {
+                throw new IllegalArgumentException("Счёт с ID %s не существует!".formatted(accountId));
             }
-        }
+
+            if (getNumberOfAccounts(accountForClose.getUser().getId()) <= 1) {
+                throw new IllegalArgumentException("Счёт %s не может быть удален, отсутствуют альтернативные счета для перевода средств!".formatted(accountId));
+            }
+            List<Account> accountList = accountForClose.getUser().getAccountList();
+            Account accountForTransfer = accountList.stream()
+                    .sorted(Comparator.comparing(Account::getId))
+                    .filter(account -> account.getId() != accountId)
+                    .findFirst()
+                    .orElseThrow();
+
+            accountForTransfer.setMoneyAmount(accountForTransfer.getMoneyAmount() + accountForClose.getMoneyAmount());
+            session.remove(accountForClose);
+
+            return 0;
+        });
     }
 
     public void depositMoney(int accountId, int moneyAmount) {
-        Optional<Account> account = dataBase.getAccountById(accountId);
+        transactionHelper.executeTransaction(session -> {
+            Account account = findAccountById(accountId);
+            if (account == null) {
+                throw new IllegalArgumentException("Счёт с ID %s не существует!".formatted(accountId));
+            }
+            account.setMoneyAmount(account.getMoneyAmount() + moneyAmount);
 
-        if (account.isPresent()) {
-            account.get().setMoneyAmount(account.get().getMoneyAmount() + moneyAmount);
-        } else throw new IllegalArgumentException("Счёт с ID %s не существует!".formatted(accountId));
+            return 0;
+        });
     }
 
     public void transferMoney(int senderAccountId, int recipientAccountId, int moneyAmount) {
-        if (senderAccountId == recipientAccountId) {
-            throw new IllegalArgumentException("ID счёта-отправителя и получателя не могут быть одинаковыми.");
-        }
+        transactionHelper.executeTransaction(session -> {
+            if (senderAccountId == recipientAccountId) {
+                throw new IllegalArgumentException("ID счёта-отправителя и получателя не могут быть одинаковыми.");
+            }
 
-        Account senderAccount = dataBase.getAccountById(senderAccountId).orElseThrow(
-                () -> new IllegalArgumentException("Счёт с ID %s не существует!".formatted(senderAccountId))
-        );
+            Account senderAccount = findAccountById(senderAccountId);
+            if (senderAccount == null) {
+                throw new IllegalArgumentException("Счёт с ID %s не существует!".formatted(senderAccount));
+            }
 
-        Account recipientAccount = dataBase.getAccountById(recipientAccountId).orElseThrow(
-                () -> new IllegalArgumentException("Счёт с ID %s не существует!".formatted(recipientAccountId))
-        );
+            Account recipientAccount = findAccountById(recipientAccountId);
+            if (recipientAccount == null) {
+                throw new IllegalArgumentException("Счёт с ID %s не существует!".formatted(recipientAccount));
+            }
 
-        if (senderAccount.getMoneyAmount() < moneyAmount) {
-            throw new IllegalArgumentException("На счете %s недостаточно средств".formatted(senderAccountId));
-        }
+            if (senderAccount.getMoneyAmount() < moneyAmount) {
+                throw new IllegalArgumentException("На счете %s недостаточно средств".formatted(senderAccountId));
+            }
 
-        long newMoneyAmountForSender = senderAccount.getMoneyAmount() - moneyAmount;
-        long newMoneyAmountForRecipient = Math.round(recipientAccount.getMoneyAmount() +
-                (moneyAmount - moneyAmount * accountDefault.getTransferCommission()));
+            senderAccount.setMoneyAmount(senderAccount.getMoneyAmount() - moneyAmount);
+            recipientAccount.setMoneyAmount((long) (recipientAccount.getMoneyAmount() + (moneyAmount - moneyAmount * accountDefault.getTransferCommission())));
 
-        senderAccount.setMoneyAmount(newMoneyAmountForSender);
-        recipientAccount.setMoneyAmount(newMoneyAmountForRecipient);
+            return 0;
+        });
     }
 
     public void withdrawMoney(int accountId, int moneyAmount) {
-        Account account = dataBase.getAccountById(accountId).orElseThrow(
-                () -> new IllegalArgumentException("Счёт с ID %s не существует!".formatted(accountId))
-        );
+        transactionHelper.executeTransaction(session -> {
+            Account account = findAccountById(accountId);
 
-        if (account.getMoneyAmount() >= moneyAmount) {
+            if (account == null) {
+                throw new IllegalArgumentException("Счёт с ID %s не существует!".formatted(accountId));
+            }
+
+            if (account.getMoneyAmount() < moneyAmount) {
+                throw new IllegalArgumentException("На счете %s недостаточно средств".formatted(accountId));
+            }
             account.setMoneyAmount(account.getMoneyAmount() - moneyAmount);
-        } else throw new IllegalArgumentException("На счете %s недостаточно средств".formatted(accountId));
+
+            return 0;
+        });
     }
 }

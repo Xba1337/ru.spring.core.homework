@@ -1,25 +1,44 @@
 package sorokinschool.spring.model;
 
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "accounts")
 public class Account {
 
-    private final int id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
-    private final int userId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
 
-    private long moneyAmount;
+    @Column(name = "money_amount")
+    private Long moneyAmount;
 
-    public Account(int id, int userId, long moneyAmount) {
-        this.id = id;
-        this.userId = userId;
+    public Account() {
+    }
+
+    public Account(User user, Long moneyAmount) {
+        this.user = user;
         this.moneyAmount = moneyAmount;
     }
 
-    public int getId() {
+    public Integer getId() {
         return id;
     }
 
-    public int getUserId() {
-        return userId;
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public long getMoneyAmount() {
@@ -34,7 +53,7 @@ public class Account {
     public String toString() {
         return "Account{" +
                 "id=" + id +
-                ", id держателя счета=" + userId +
+                ", id держателя счета=" + user.getId() +
                 ", баланс=" + moneyAmount +
                 '}';
     }
